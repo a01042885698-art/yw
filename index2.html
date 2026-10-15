@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>고속도로 휴게소 & 주유소 지도</title>
   
-  <!-- 카카오맵 API 스크립트 (autoload=false 옵션을 추가하여 로딩 순서 보장) -->
+  <!-- 카카오맵 API 스크립트 (autoload=false 옵션으로 로딩 안정성 확보) -->
   <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=f6a18520d069229015807e8670e8c92a&libraries=services&autoload=false"></script>
 
   <style>
@@ -139,7 +139,7 @@
       height: 100%;
     }
 
-    /* 지도 상단 컨트롤 버튼 (교통정보, 로드뷰) */
+    /* 지도 상단 오버레이 컨트롤 버튼 (교통정보, 로드뷰) */
     .map-controls {
       position: absolute;
       top: 16px;
@@ -278,27 +278,27 @@
     let roadviewObject; // 로드뷰 객체
     let roadviewClient; // 로드뷰 서비스 객체
 
-    // 카카오 지도 SDK가 안전하게 완전 로드된 후 실행되도록 이벤트 바인딩
+    // 카카오 지도 SDK 로딩 완료 후 초기화 함수 실행
     window.onload = function() {
       if (window.kakao && window.kakao.maps) {
         kakao.maps.load(function() {
           initializeMap();
         });
       } else {
-        console.error('카카오맵 SDK를 불러오지 못했습니다. AppKey 및 도메인 설정을 확인하세요.');
+        console.error('카카오맵 SDK를 불러오지 못했습니다.');
       }
     };
 
-    // 1. 지도 초기화 및 사용자 위치 탐색
+    // 1. 지도 초기화 및 위치 검색
     function initializeMap() {
       const mapContainer = document.getElementById('map');
       
-      // 기본 중심 좌표 (서울시청 기준)
+      // 기본 중심 좌표 (서울시청)
       const defaultCenter = new kakao.maps.LatLng(37.566826, 126.9786567);
       
       const mapOptions = {
         center: defaultCenter,
-        level: 6 // 지도 확대 레벨
+        level: 7 // 휴게소 검색을 고려해 조금 더 넓게 표시 (레벨 7)
       };
 
       // 지도 객체 생성
@@ -313,19 +313,19 @@
       roadviewObject = new kakao.maps.Roadview(roadviewContainer);
       roadviewClient = new kakao.maps.RoadviewClient();
 
-      // 지도 클릭 이벤트 등록 (로드뷰 모드 지원)
+      // 지도 클릭 이벤트 등록 (로드뷰 지원)
       kakao.maps.event.addListener(map, 'click', handleMapClick);
 
-      // 사용자 현재 위치 확인 및 권한 요청
+      // 사용자 위치 탐색 실행
       requestUserLocation();
     }
 
-    // 2. 위치 권한 요청 및 지도 중심 이동
+    // 2. 사용자 현재 위치 탐색
     function requestUserLocation() {
       if (navigator.geolocation) {
         const geoOptions = {
           enableHighAccuracy: true,
-          timeout: 8000, // 8초 타임아웃
+          timeout: 8000,
           maximumAge: 0
         };
 
@@ -335,12 +335,12 @@
             const userLongitude = position.coords.longitude;
             const userLocation = new kakao.maps.LatLng(userLatitude, userLongitude);
 
-            // 지도 중심을 사용자 현재 위치로 이동 및 검색 실행
+            // 지도 중심을 사용자 현재 위치로 이동 및 장소 검색
             map.setCenter(userLocation);
             fetchPlaces();
           },
           function(error) {
-            console.warn('위치 권한을 허용받지 못했거나 오류가 발생했습니다. 기본 위치를 사용합니다.', error.message);
+            console.warn('위치 정보를 가져올 수 없어 기본 위치에서 검색합니다.', error.message);
             fetchPlaces();
           },
           geoOptions
@@ -350,41 +350,41 @@
       }
     }
 
-    // 3. 탭 변경 처리 함수
+    // 3. 탭 전환 처리
     function switchTab(selectedTab) {
       if (currentTab === selectedTab) return;
 
       currentTab = selectedTab;
 
-      // 탭 버튼 스타일 업데이트
+      // 탭 스타일 업데이트
       document.getElementById('tab-gas-station').classList.toggle('active', selectedTab === 'gas_station');
       document.getElementById('tab-rest-area').classList.toggle('active', selectedTab === 'rest_area');
 
-      // 기존 검색 결과 삭제 및 새로 검색
+      // 기존 결과 지우고 새 검색 실행
       clearResults();
       fetchPlaces();
     }
 
-    // 4. 현재 활성화된 탭에 맞춰 데이터 검색
+    // 4. 현재 탭에 맞는 데이터 검색
     function fetchPlaces() {
       const currentMapCenter = map.getCenter();
 
       if (currentTab === 'gas_station') {
-        // [탭 1] 카테고리 코드 OL7 (주유소, 충전소) 기반 검색
+        // [탭 1] 카테고리 코드 OL7 (주유소, 충전소) 기반 검색 (반경 10km)
         placesService.categorySearch('OL7', placesSearchCallback, {
           location: currentMapCenter,
-          radius: 10000 // 반경 10km 검색
+          radius: 10000
         });
       } else if (currentTab === 'rest_area') {
-        // [탭 2] '전국 휴게소' 키워드 기반 검색
-        placesService.keywordSearch('전국 휴게소', placesSearchCallback, {
+        // [탭 2] '휴게소' 키워드 기반 검색 (고속도로 특성을 고려해 반경 30km로 설정)
+        placesService.keywordSearch('휴게소', placesSearchCallback, {
           location: currentMapCenter,
-          radius: 20000 // 반경 20km 검색
+          radius: 30000
         });
       }
     }
 
-    // 5. 장소 검색 완료 시 콜백 함수
+    // 5. 검색 결과 콜백 함수
     function placesSearchCallback(data, status) {
       clearResults();
 
@@ -399,16 +399,16 @@
           const marker = createMarker(markerPosition, placeItem);
           activeMarkers.push(marker);
 
-          // 왼쪽 사이드바 리스트 아이템 생성
+          // 사이드바 목록 생성
           const listItem = createListItem(placeItem, marker);
           listContainer.appendChild(listItem);
         }
       } else {
-        listContainer.innerHTML = '<div class="no-result">주변에 검색 결과가 없습니다.</div>';
+        listContainer.innerHTML = '<div class="no-result">주변 30km 이내에 휴게소 검색 결과가 없습니다.</div>';
       }
     }
 
-    // 6. 마커 생성 및 이벤트 등록
+    // 6. 마커 생성 및 클릭 이벤트
     function createMarker(position, placeData) {
       const marker = new kakao.maps.Marker({
         position: position,
@@ -427,7 +427,7 @@
       return marker;
     }
 
-    // 7. 리스트 아이템 생성
+    // 7. 리스트 항목 생성
     function createListItem(placeData, marker) {
       const li = document.createElement('li');
       li.className = 'place-item';
@@ -454,7 +454,7 @@
       return li;
     }
 
-    // 8. 마커 팝업(인포윈도우) 표시
+    // 8. 팝업(인포윈도우) 표시
     function displayInfoWindow(marker, placeData) {
       const addressText = placeData.road_address_name || placeData.address_name;
       const content = `
@@ -468,7 +468,7 @@
       infoWindow.open(map, marker);
     }
 
-    // 9. 기존 마커 및 목록 삭제
+    // 9. 마커 및 목록 초기화
     function clearResults() {
       for (let i = 0; i < activeMarkers.length; i++) {
         activeMarkers[i].setMap(null);
@@ -533,4 +533,3 @@
     }
   </script>
 </body>
-</html>
